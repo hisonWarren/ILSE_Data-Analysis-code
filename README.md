@@ -26,7 +26,7 @@ This repository contains Python scripts used to perform the statistical analyses
 
 ## Partial Correlation Analysis
 
-`correlation.py` implements our partial correlation analysis to examine relationships between cognitive measures and brain components:
+`Partial_correlation_analysis.py` implements our partial correlation analysis to examine relationships between cognitive measures and brain components:
 
 - Partial Spearman correlation analysis to control for potential confounders
 - Covariate adjustment for sex, age, education, APOE ε4 status, and total intracranial volume
