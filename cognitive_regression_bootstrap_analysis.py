@@ -2428,6 +2428,50 @@ def run_regression_analysis(dependent_vars, independent_vars,
     print("\nAnalysis complete!")
     return summary_df
 
+def create_reliability_legend_figure(output_dir):
+    """
+    Create a simplified legend figure for reliability indicators.
+    """
+    # Create output directory if it doesn't exist
+    conditional_plots_dir = os.path.join(output_dir, "conditional_effect_plots")
+    os.makedirs(conditional_plots_dir, exist_ok=True)
+    
+    # Create a minimalist figure
+    fig_legend = plt.figure(figsize=(4, 3))
+    ax_legend = fig_legend.add_subplot(111)
+    
+    # Create empty plot just for legend
+    ax_legend.plot([], [], linestyle='-', color='black', linewidth=2.5, 
+                 label='High reliability (n≥10)')
+    ax_legend.plot([], [], linestyle='--', color='black', linewidth=2.5, 
+                 label='Medium reliability (5≤n<10)')
+    ax_legend.plot([], [], linestyle=':', color='black', linewidth=2.5, 
+                 label='Low reliability (n<5)')
+    ax_legend.plot([], [], 'rx', markersize=8, markeredgewidth=2, 
+                 label='Warning (n<3)')
+    
+    # Remove all axes elements
+    ax_legend.set_xticks([])
+    ax_legend.set_yticks([])
+    ax_legend.set_xlabel("")
+    ax_legend.set_ylabel("")
+    
+    # Remove borders
+    for spine in ax_legend.spines.values():
+        spine.set_visible(False)
+    
+    # Add legend only
+    ax_legend.legend(fontsize=12, loc='center')
+    
+    # Save the figure
+    legend_path = os.path.join(conditional_plots_dir, "reliability_indicators_legend.png")
+    plt.tight_layout()
+    plt.savefig(legend_path, dpi=300, bbox_inches='tight')
+    plt.close(fig_legend)
+    
+    print(f"  ✓ Created reliability indicators legend: {legend_path}")
+    return legend_path
+
 # Function to create conditional effect plots
 def create_conditional_effect_plots(model, data, dependent_var, component_var, moderator_var, output_dir):
     """
@@ -2456,6 +2500,11 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
     conditional_plots_dir = os.path.join(output_dir, "conditional_effect_plots")
     os.makedirs(conditional_plots_dir, exist_ok=True)
     
+    # Check if the legend file exists, if not, create it
+    legend_path = os.path.join(conditional_plots_dir, "reliability_indicators_legend.png")
+    if not os.path.exists(legend_path):
+        create_reliability_legend_figure(output_dir)
+    
     # Check if variables exist in the dataset
     missing_vars = []
     if component_var not in data.columns:
@@ -2465,7 +2514,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
         print(f"  ⚠️ Moderator variable {moderator_var} not in dataset")
         missing_vars.append(moderator_var)
     
-    # If variables are missing, try to find matching ones
+    # If variables are missing from the dataset, try to find matching variables
     if missing_vars:
         for var in missing_vars:
             possible_matches = [col for col in data.columns if var.lower() in col.lower()]
@@ -2500,15 +2549,15 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
     plt.rcParams['ytick.minor.size'] = 0  # Remove minor ticks
     
     # Create a taller figure to accommodate all content
-    fig = plt.figure(figsize=(10, 14))  # Increase width and height for better font and J-N plot accommodation
+    fig = plt.figure(figsize=(10, 14))  # Increase width and height to better accommodate fonts and J-N plot
     
-    # Use GridSpec to create two subplots, larger on top for main plot, smaller below for Johnson-Neyman plot
+    # Use GridSpec to create two subplots, upper larger for main plot, lower smaller for Johnson-Neyman plot
     gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1], figure=fig)
     
     # Create main plot
     ax = fig.add_subplot(gs[0])
     
-    # Define colors (avoiding blue as requested)
+    # Define colors (as requested, avoid blue)
     categorical_colors = ['#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']  # red, green, orange, purple, teal
     point_colors = '#e74c3c'  # red for scatter plots
     
@@ -2518,14 +2567,14 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
     
     if moderator_var in data.columns:
         unique_values = data[moderator_var].unique()
-        if len(unique_values) <= 5:  # If 5 or fewer unique values, treat as categorical
+        if len(unique_values) <= 5:  # If there are 5 or fewer unique values, treat as categorical
             is_categorical = True
     
     # Prepare display names for chart labels
     component_display = get_display_name(component_var)
     dependent_display = get_display_name(dependent_var)
     
-    # Set moderator variable display name
+    # Set display name for moderator variable
     moderator_display = get_display_name(moderator_var)
     
     # Special variable display name mapping
@@ -2542,7 +2591,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
     elif "TMB" in moderator_var:
         moderator_display = "TMT-B (T3)"
     
-    # If gender or APOE genotype interaction
+    # If sex or APOE genotype interaction
     if "SEX" in moderator_var:
         moderator_display = "Sex"
     elif "Group" in moderator_var:
@@ -2550,24 +2599,24 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
     
     interaction_display = f"{component_display} × {moderator_display}"
     
-    # Check if component variable is in the model but not in the data
+    # Check if component or moderator variables need to be added to the data
     component_var_in_model = component_var in model.params.index
     component_var_in_data = component_var in data.columns
     
     moderator_var_in_model = moderator_var in model.params.index
     moderator_var_in_data = moderator_var in data.columns
     
-    # If component variable is not in the data but exists in the model, try to add it to the data
+    # If component variable is not in data but has interaction terms in the model, try to add it to the data
     modified_data = data.copy()
     
     if not component_var_in_data and component_var_in_model:
-        print(f"  ⚠️ Component variable {component_var} exists in the model but not in the data, trying to get from other data source")
-        # Here you can try to get it from other data source, if it's not available, create simulated data
+        print(f"  ⚠️ Component variable {component_var} is in model but not in data, trying to get from other data sources")
+        # Here we can try to get from other data sources, or create simulated data if not available
         modified_data[component_var] = np.random.normal(0, 1, len(modified_data))
         print(f"  ⓘ Created simulated data for component variable {component_var}")
     
     if not moderator_var_in_data and moderator_var_in_model:
-        print(f"  ⚠️ Moderator variable {moderator_var} exists in the model but not in the data, trying to get from other data source")
+        print(f"  ⚠️ Moderator variable {moderator_var} is in model but not in data, trying to get from other data sources")
         if is_categorical:
             # Generate random categories for categorical variable
             modified_data[moderator_var] = np.random.choice([1, 2], len(modified_data))
@@ -2608,7 +2657,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
     
     # If still not found, use default format but display warning
     if not interaction_in_model:
-        print(f"  ⚠️ Warning: Interaction term {component_display} × {moderator_display} not in model. Will try to create conditional effect plot, but result may not be reliable.")
+        print(f"  ⚠️ Warning: Interaction term {component_display} × {moderator_display} not in model. Will attempt to create conditional effect plot, but results may be unreliable.")
         interaction_term = f"{component_var}_x_{moderator_var}"
     
     # Get model coefficients
@@ -2640,8 +2689,8 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
         
     except Exception as e:
         print(f"  ⚠️ Error getting model coefficients: {str(e)}")
-        print(f"  ⓘ Available model parameters: {list(model.params.index)}")
-        print(f"  ⚠️ Unable to create conditional effect plot")
+        print(f"  • Available model parameters: {list(model.params.index)}")
+        print(f"  ⚠️ Unable to generate conditional effect plot")
         return None
     
     # Use modified data for plotting
@@ -2674,7 +2723,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
         
         # Use more accurate method to fit regression line - directly fit linear regression for each category
         for i, mod_value in enumerate(unique_mod_values):
-            # Get data subset for this category
+            # Get subset of data for this category
             subset = data[data[moderator_var] == mod_value]
             
             if len(subset) > 2:  # Ensure enough points for fitting
@@ -2689,14 +2738,14 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                     X_pred = sm.add_constant(x_range)
                     y_pred = fit_model.predict(X_pred)
                     
-                    # Plot fitted regression line, using clear and suitable academic publication line width
+                    # Plot fitted regression line, using clear and suitable for academic publication line width
                     line = ax.plot(x_range, y_pred, linewidth=4.5, 
                                   color=categorical_colors[i % len(categorical_colors)], alpha=1.0)
                     
                     print(f"  ✓ Directly fitted regression line for {moderator_display}={mod_value} group")
                 except Exception as e:
-                    print(f"  ⚠️ Error directly fitting regression line: {str(e)}, using model coefficients")
-                    # If direct fitting fails, fall back to using model coefficients
+                    print(f"  ⚠️ Error fitting regression line: {str(e)}, using model coefficients")
+                    # If direct fitting fails, revert to using model coefficients
                     x_subset_min = subset[component_var].min()
                     x_subset_max = subset[component_var].max()
                     x_range = np.linspace(x_subset_min, x_subset_max, 100)
@@ -2709,7 +2758,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                     
                     if is_flat_line:
                         # Add slight offset to almost horizontal line to ensure visibility, while maintaining scientific rigor
-                        # Minor offset won't change scientific explanation, but improves graph readability
+                        # Mild offset won't change scientific explanation, but improve graph readability
                         category_offset = i * data_y_range * 0.03  # Offset for each category
                         y_pred = y_pred + category_offset
                     
@@ -2717,7 +2766,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                                   color=categorical_colors[i % len(categorical_colors)], alpha=1.0)
             else:
                 # If not enough points, use original model coefficients
-                print(f"  ⚠️ {moderator_display}={mod_value} group data points insufficient, using model coefficients to generate regression line")
+                print(f"  ⚠️ {moderator_display}={mod_value} group data points insufficient, using model coefficients for regression line")
                 if len(subset) > 0:
                     x_range = np.linspace(subset[component_var].min(), subset[component_var].max(), 100)
                 else:
@@ -2761,7 +2810,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                 # Use mapping label if exists
                 label = label_mapping.get(mod_value, f"{mod_value}")
                 
-                # Print conditional effect information only in console, not in graph annotations
+                # Print conditional effect information only in console, not in graph
                 print(f"  • Conditional effect of {component_display} at {label} {moderator_display} ({mod_value}): "
                       f"{current_effect:.3f} ({p_display})")
             except Exception as e:
@@ -2782,12 +2831,12 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
         y_min = data[dependent_var].min()
         y_max = data[dependent_var].max()
         
-        # Add slight padding to boundaries for aesthetics
+        # Add slight padding for aesthetics
         y_padding = 0.05 * (y_max - y_min)
         y_axis_min = y_min - y_padding
         y_axis_max = y_max + y_padding
         
-        # Set y axis range, ensuring graph more accurately displays data
+        # Set y axis range to ensure graph accurately displays data
         ax.set_ylim(y_axis_min, y_axis_max)
         
         # Get T3 time point (moderator variable) range
@@ -2803,201 +2852,221 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
         cbar = plt.colorbar(scatter)
         cbar.set_label(moderator_display, fontsize=24, fontweight='bold')
         
-        # Use scatter data range, limit x axis range
+        # Use scatter data range to limit x axis range
         x_min = data[component_var].min()
         x_max = data[component_var].max()
         
-        # Appropriate padding for aesthetics
+        # Add slight padding for aesthetics
         x_padding = 0.05 * (x_max - x_min)
         x_range = np.linspace(x_min - x_padding, x_max + x_padding, 100)
         
-        # Use 3 points from actual data distribution as Low/Medium/High
+        # Use actual data distribution of 3 points as Low/Medium/High
         mod_range = np.linspace(mod_min, mod_max, 3)
         mod_labels = ["Low", "Medium", "High"]
         
-        # Store prediction range, for checking if regression line exceeds actual data range too much
+        # Store prediction range for checking if regression line exceeds actual data range too much
         all_y_preds = []
+        # Store number of data points and fitting line type for each level
+        data_counts = []
+        line_styles = []
         
-        # First calculate predictions for each moderator variable level
+        # First calculate predictions for each moderator level
         for i, mod_value in enumerate(mod_range):
-            # Calculate predictions
-            y_pred = b0 + b1 * x_range + b2 * mod_value + b3 * x_range * mod_value
-            all_y_preds.append(y_pred)
+            # Get data points close to this moderator value (finer window)
+            # Use percentage range instead of fixed value to ensure good data distribution
+            mod_range_pct = (mod_max - mod_min) * 0.2  # Use 20% of total range as window
+            subset = data[(data[moderator_var] >= mod_value - mod_range_pct) & 
+                        (data[moderator_var] <= mod_value + mod_range_pct)]
+            
+            # Store data point count
+            data_counts.append(len(subset))
+            
+            # Determine line type based on data point count
+            if len(subset) >= 10:
+                # Enough data points - use solid line
+                line_styles.append('-')
+            elif len(subset) >= 5:
+                # Medium data points - use dashed line
+                line_styles.append('--')
+            else:
+                # Not enough data points - use dotted line
+                line_styles.append(':')
+            
+            # If data points too few, expand range
+            if len(subset) < 5:
+                original_count = len(subset)
+                mod_range_pct = (mod_max - mod_min) * 0.35  # Expand to 35%
+                subset = data[(data[moderator_var] >= mod_value - mod_range_pct) & 
+                            (data[moderator_var] <= mod_value + mod_range_pct)]
+                print(f"  ⓘ {mod_labels[i]} {moderator_display} data points less than 5 ({original_count}), expanded range has {len(subset)} points")
+            
+            # If data points still too few, use weighted fitting instead of all data
+            if len(subset) < 5:
+                print(f"  ⚠️ {mod_labels[i]} {moderator_display} data points still insufficient, will use weighted fitting")
+                # Create copy of all data
+                full_data = data.copy()
+                
+                # Calculate weights for each point - closer points get higher weight
+                distances = np.abs(full_data[moderator_var] - mod_value)
+                max_dist = np.max(distances)
+                if max_dist > 0:  # Avoid division by zero
+                    weights = 1 - (distances / max_dist) * 0.8  # Weights from 0.2 to 1.0
+                else:
+                    weights = np.ones(len(distances))
+                
+                # Use weighted fitting
+                try:
+                    X_fit = sm.add_constant(full_data[component_var])
+                    wls_model = sm.WLS(full_data[dependent_var], X_fit, weights=weights).fit()
+                    
+                    # Use fitted model to generate predictions
+                    X_pred = sm.add_constant(x_range)
+                    y_pred = wls_model.predict(X_pred)
+                    
+                    # Check if predictions are within reasonable range
+                    y_pred = np.clip(y_pred, y_axis_min - y_padding, y_axis_max + y_padding)
+                    all_y_preds.append(y_pred)
+                    
+                    print(f"  ✓ Used weighted fitting for {mod_labels[i]} {moderator_display}")
+                except Exception as e:
+                    print(f"  ⚠️ Weighted fitting failed: {str(e)}, reverting to model coefficients")
+                    # If weighted fitting fails, revert to model coefficients
+                    y_pred = b0 + b1 * x_range + b2 * mod_value + b3 * x_range * mod_value
+                    y_pred = np.clip(y_pred, y_axis_min - y_padding, y_axis_max + y_padding)
+                    all_y_preds.append(y_pred)
+            else:
+                # Enough data points, perform normal fitting
+                try:
+                    X_fit = sm.add_constant(subset[component_var])
+                    fit_model = sm.OLS(subset[dependent_var], X_fit).fit()
+                    
+                    # Use fitted model to generate predictions
+                    X_pred = sm.add_constant(x_range)
+                    y_pred = fit_model.predict(X_pred)
+                    
+                    # Calculate 95% confidence interval for fitting quality (not displayed in graph)
+                    y_pred_se = fit_model.get_prediction(X_pred).summary_frame()["mean_se"]
+                    t_value = stats.t.ppf(0.975, fit_model.df_resid)
+                    ci_width = t_value * y_pred_se
+                    
+                    # Check confidence interval width, if too wide indicates unreliable fitting
+                    ci_width_relative = np.mean(ci_width) / (y_max - y_min)
+                    if ci_width_relative > 0.3 and len(subset) < 10:  # Average confidence interval width exceeds data range by 30%
+                        print(f"  ⚠️ {mod_labels[i]} {moderator_display} fitting confidence interval too wide ({ci_width_relative:.2f}), indicating unreliable fitting")
+                        # If dashed line, change to dotted line to indicate lower reliability
+                        if line_styles[i] == '--':
+                            line_styles[i] = ':'
+                    
+                    # Check if predictions are within reasonable range
+                    y_pred = np.clip(y_pred, y_axis_min - y_padding, y_axis_max + y_padding)
+                    all_y_preds.append(y_pred)
+                    
+                    print(f"  ✓ Used {mod_labels[i]} {moderator_display}({len(subset)} data points) fitted regression line")
+                except Exception as e:
+                    print(f"  ⚠️ Error fitting regression line: {str(e)}, using model coefficients")
+                    # If fitting fails, revert to using model coefficients
+                    y_pred = b0 + b1 * x_range + b2 * mod_value + b3 * x_range * mod_value
+                    y_pred = np.clip(y_pred, y_axis_min - y_padding, y_axis_max + y_padding)
+                    all_y_preds.append(y_pred)
         
-        # Check if predictions significantly exceed actual data range
+        # Check if prediction range is reasonable
         all_y_preds = np.array(all_y_preds)
         y_pred_min = np.min(all_y_preds)
         y_pred_max = np.max(all_y_preds)
         
-        # If predictions significantly exceed actual data range, try to correct
+        # If predictions exceed range, adjust appropriately
         if y_pred_min < y_axis_min or y_pred_max > y_axis_max:
-            # Calculate severity of exceeding
-            range_violation = max(
-                (y_axis_min - y_pred_min) / (y_max - y_min) if y_pred_min < y_axis_min else 0,
-                (y_pred_max - y_axis_max) / (y_max - y_min) if y_pred_max > y_axis_max else 0
-            )
+            y_padding_adjusted = max(
+                y_axis_min - y_pred_min if y_pred_min < y_axis_min else 0,
+                y_pred_max - y_axis_max if y_pred_max > y_axis_max else 0
+            ) + y_padding
             
-            # If exceeding range exceeds 100% of actual data range, try to directly fit instead of using model coefficients
-            if range_violation > 1.0:
-                print(f"  ⚠️ Detected regression line significantly exceeding data range ({range_violation:.1f}x), trying to directly fit data...")
-                
-                # Clear previous prediction results
-                all_y_preds = []
-                
-                # Fit separate regression lines for each moderator variable level
-                for i, mod_value in enumerate(mod_range):
-                    # Get data points close to this moderator value
-                    # Find all data points within 20% range of moderator value (using percentage range)
-                    mod_range_pct = (mod_max - mod_min) * 0.2  # Use 20% of total range as window
-                    subset = data[(data[moderator_var] >= mod_value - mod_range_pct) & 
-                                (data[moderator_var] <= mod_value + mod_range_pct)]
-                    
-                    # If data points too few, expand range
-                    if len(subset) < 5:
-                        mod_range_pct = (mod_max - mod_min) * 0.35  # Expand to 35%
-                        subset = data[(data[moderator_var] >= mod_value - mod_range_pct) & 
-                                    (data[moderator_var] <= mod_value + mod_range_pct)]
-                    
-                    # If data points still too few, use all data
-                    if len(subset) < 3:
-                        subset = data
-                        print(f"  ⓘ {mod_labels[i]} {moderator_display} data points too few, using all data to fit")
-                    
-                    # Use local data to fit regression line
-                    try:
-                        X_fit = sm.add_constant(subset[component_var])
-                        fit_model = sm.OLS(subset[dependent_var], X_fit).fit()
-                        
-                        # Use fitted model to generate predictions
-                        X_pred = sm.add_constant(x_range)
-                        y_pred = fit_model.predict(X_pred)
-                        
-                        # Check if predictions within reasonable range
-                        if np.min(y_pred) < y_axis_min - y_padding:
-                            y_pred = np.maximum(y_pred, y_axis_min - y_padding)
-                        if np.max(y_pred) > y_axis_max + y_padding:
-                            y_pred = np.minimum(y_pred, y_axis_max + y_padding)
-                        
-                        all_y_preds.append(y_pred)
-                    except Exception as e:
-                        print(f"  ⚠️ Error fitting regression line: {str(e)}, using original model coefficients")
-                        # If fitting fails, fall back to using model coefficients
-                        y_pred = b0 + b1 * x_range + b2 * mod_value + b3 * x_range * mod_value
-                        
-                        # Limit predictions within reasonable range
-                        y_pred = np.clip(y_pred, y_axis_min - y_padding, y_axis_max + y_padding)
-                        all_y_preds.append(y_pred)
+            # Re-set y axis range
+            ax.set_ylim(y_min - y_padding_adjusted, y_max + y_padding_adjusted)
         
-        # Plot regression lines
+        # Plot regression line, using different line type to indicate data sufficiency
         for i, mod_value in enumerate(mod_range):
             y_pred = all_y_preds[i]
             
-            # Check if almost parallel regression lines (small effect)
-            if len(y_pred) > 1:
-                y_range = np.max(y_pred) - np.min(y_pred)
-                data_y_range = y_max - y_min
-                is_flat_line = y_range < (data_y_range * 0.05)  # If prediction range smaller than 5% of data range
-            else:
-                is_flat_line = False
-            
-            # Calculate conditional effect size, for judging if small effect
-            try:
-                conditional_effect = b1 + b3 * mod_value
-                is_tiny_effect = abs(conditional_effect) < 0.5  # If conditional effect smaller than 0.5
-            except:
-                is_tiny_effect = False
-            
-            # Use viridis color scheme to maintain consistency
+            # Use viridis color scheme for consistency
             color = plt.cm.viridis(i/2)
             
             # Check and handle NaN values
             if np.any(np.isnan(y_pred)):
-                print(f"  ⚠️ Found NaN in predictions, handling it")
+                print(f"  ⚠️ Found NaN in predictions, handling")
                 y_pred = np.nan_to_num(y_pred, nan=np.nanmean(y_pred))
             
-            # Ensure visibility of lines, while maintaining scientific rigor
-            if is_flat_line or is_tiny_effect:
-                # For almost parallel lines, add slight scientific reasonable offset to ensure visibility in graph
-                # Increase offset to 5% of data range, ensure lines clearly separate but don't exceed range
-                y_offset = i * data_y_range * 0.05
-                
-                # Generate offset predictions
-                y_with_slope = y_pred + y_offset
-                
-                # Special check for T3Component7 and T3digitspanbackward interaction
-                if 'T3Component7' in component_var and 'digitspanbackward' in moderator_var:
-                    print(f"  ⚠️ Detected T3Component7 and T3digitspanbackward interaction, applying special handling")
-                    # Calculate current line range
-                    line_min = np.min(y_with_slope)
-                    line_max = np.max(y_with_slope)
-                    
-                    # If line exceeds 60% of data range, compress and move into data range
-                    if line_max > y_min + data_y_range * 0.6:
-                        # Calculate distance to move down
-                        shift_down = line_max - (y_min + data_y_range * 0.6)
-                        y_with_slope = y_with_slope - shift_down
-                        print(f"  ✓ Moved line down {shift_down:.3f} units, ensuring within data range")
-                
-                # Ensure all lines within data point range (75% range)
-                y_axis_max = y_min + data_y_range * 0.85  # 85% of data range as upper limit
-                y_axis_min = y_min + data_y_range * 0.1   # 10% of data range as lower limit
-                
-                if np.max(y_with_slope) > y_axis_max:
-                    # If exceeds upper limit, move down overall
-                    excess = np.max(y_with_slope) - y_axis_max
-                    y_with_slope = y_with_slope - excess - 0.01 * data_y_range
-                    print(f"  ✓ Line exceeds upper limit, adjusted down {excess:.3f} units")
-                
-                if np.min(y_with_slope) < y_axis_min:
-                    # If exceeds lower limit, move up overall
-                    deficit = y_axis_min - np.min(y_with_slope)
-                    y_with_slope = y_with_slope + deficit + 0.01 * data_y_range
-                    print(f"  ✓ Line exceeds lower limit, adjusted up {deficit:.3f} units")
-                
-                # Plot line, ensuring academic publication quality
-                line = ax.plot(x_range, y_with_slope, linestyle='-', linewidth=4.5, 
-                               color=color,
-                               label=f"{mod_labels[i]} {moderator_display} ({mod_value:.2f})")
-                print(f"  ✓ Applied offset to small effect {mod_labels[i]} {moderator_display}, ensuring line visibility")
-            else:
-                # Normal plot, suitable academic publication line width
-                line = ax.plot(x_range, y_pred, linestyle='-', linewidth=4.5, 
-                              color=color,
-                              label=f"{mod_labels[i]} {moderator_display} ({mod_value:.2f})")
+            # Generate more detailed label including data point count information
+            data_count = data_counts[i]
+            reliability_terms = {
+                10: "high reliability", 
+                5: "medium reliability", 
+                0: "low reliability"
+            }
+            reliability = next((reliability_terms[threshold] for threshold in sorted(reliability_terms.keys(), reverse=True) if data_count >= threshold), "low reliability")
+            
+            # Create more academic label format
+            label = f"{mod_labels[i]} {moderator_display} ({mod_value:.2f}, n={data_count})"
+            
+            # Plot line, using different line type to indicate reliability
+            line = ax.plot(x_range, y_pred, linestyle=line_styles[i], linewidth=4.5, 
+                          color=color, label=label)
+            
+            # If data points very few (<3), add warning marker
+            if data_count < 3:
+                # Add warning marker at middle of line
+                mid_index = len(x_range) // 2
+                ax.plot(x_range[mid_index], y_pred[mid_index], 'rx', markersize=10, markeredgewidth=3)
         
-        # Try to get and display conditional effect for each moderator value
+        # Try to get and display conditional effect for each moderator level
         try:
-            # Calculate conditional effect
-            conditional_effect = b1 + b3 * mod_value
-            p_value = calculate_conditional_effect_p_value(model, component_var, moderator_var, mod_value)
+            # Add conditional effect table, will display key statistical information below graph
+            table_data = []
+            table_columns = ['Moderator Level', 'Sample Size', 'Conditional Effect', 'p-value', 'Reliability']
             
-            # Place significance marker in front of p-value instead of value
-            if p_value < 0.001:
-                sig_marker = "***"
-                p_display = f"{sig_marker}p<0.001"
-            elif p_value < 0.01:
-                sig_marker = "**"
-                p_display = f"{sig_marker}p={p_value:.3f}"
-            elif p_value < 0.05:
-                sig_marker = "*"
-                p_display = f"{sig_marker}p={p_value:.3f}"
-            else:
-                sig_marker = ""
-                p_display = f"p={p_value:.3f}"
+            for i, mod_value in enumerate(mod_range):
+                # Calculate conditional effect
+                conditional_effect = b1 + b3 * mod_value
+                p_value = calculate_conditional_effect_p_value(model, component_var, moderator_var, mod_value)
+                
+                # Determine reliability level
+                if data_counts[i] >= 10:
+                    reliability = "High"
+                elif data_counts[i] >= 5:
+                    reliability = "Medium"
+                else:
+                    reliability = "Low"
+                
+                # Place significance marker in front of p-value instead of value
+                if p_value < 0.001:
+                    sig_marker = "***"
+                    p_display = f"{sig_marker}p<0.001"
+                elif p_value < 0.01:
+                    sig_marker = "**"
+                    p_display = f"{sig_marker}p={p_value:.3f}"
+                elif p_value < 0.05:
+                    sig_marker = "*"
+                    p_display = f"{sig_marker}p={p_value:.3f}"
+                else:
+                    sig_marker = ""
+                    p_display = f"p={p_value:.3f}"
+                
+                # Add to table data
+                table_data.append([f"{mod_labels[i]} ({mod_value:.2f})", str(data_counts[i]), 
+                                 f"{conditional_effect:.3f}", p_display, reliability])
+                
+                # Print information only in console, not in graph
+                print(f"  • Conditional effect of {component_display} at {mod_labels[i]} {moderator_display} ({mod_value:.2f}): "
+                      f"{conditional_effect:.3f} ({p_display}), n={data_counts[i]}, reliability:{reliability}")
             
-            # Print information only in console, not in graph annotations
-            print(f"  • Conditional effect of {component_display} at {mod_labels[i]} {moderator_display} ({mod_value:.2f}): "
-                  f"{conditional_effect:.3f} ({p_display})")
         except Exception as e:
-            print(f"  ⚠️ Error calculating conditional effect: {str(e)}")
+            print(f"  ⚠️ Error calculating conditional effects: {str(e)}")
             print(f"  • Conditional effect not available for {mod_labels[i]} {moderator_display}")
         
-        # Move legend to top left position (original N=37 position)
+        # Move legend to top left position
         ax.legend(fontsize=20, loc='upper left')
     
-    # Complete plot details
-    # Optimize annotations - Add moderator information to x axis label, ensuring only English
-    # Use label format with moderator information for both categorical and continuous variables
+    # Whether categorical or continuous variable, use label format with moderator information
     enhanced_x_label = f"{component_display} (moderated by {moderator_display})"
     
     ax.set_xlabel(enhanced_x_label, fontsize=24, fontweight='bold')
@@ -3012,12 +3081,12 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
     ax.spines['left'].set_linewidth(1.5)
     ax.spines['bottom'].set_linewidth(1.5)
     
-    # If interaction term exists in the model, add interaction term p-value, print only in console without graph annotations
+    # If interaction term in model, add interaction term p-value, print only in console without graph annotation
     if interaction_in_model:
         # Get p-value but not add to graph
         p_value = model.pvalues[interaction_term]
         
-        # Set p-value text with significant marker
+        # Set p-value text with significance marker
         if p_value < 0.001:
             p_value_text = '***p<0.001'
         else:
@@ -3029,10 +3098,10 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
             if p_value < 0.001:
                 p_value_text = f'*{p_value_text}'  # Cumulative to ***
         
-        # Print p-value information only in console, not in graph annotations
+        # Print p-value information only in console, not in graph
         print(f"  ⓘ Interaction term {interaction_display} p-value: {p_value_text}")
 
-        # Add significant marker to top right corner of plot
+        # Add significance marker to graph top right corner
         ax.annotate(p_value_text, xy=(0.98, 0.90), xycoords='axes fraction', 
                      fontsize=22, fontweight='bold', ha='right',
                      bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.8))
@@ -3047,10 +3116,10 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
             mod_min = data[moderator_var].min()
             mod_max = data[moderator_var].max()
             
-            # Add margin for aesthetics
+            # Add padding for aesthetics
             mod_padding = 0.05 * (mod_max - mod_min)
             
-            # Directly use actual data T3 range to calculate conditional effect, ensuring consistent with main plot range
+            # Directly use actual data T3 range to calculate conditional effect, ensuring consistency with main plot
             mod_jn = np.linspace(mod_min, mod_max, 100)
             cond_effects = []
             
@@ -3061,7 +3130,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
             cond_effects = np.array(cond_effects)
             
             # Calculate standard errors and confidence intervals
-            # Here try to prevent error: If component variable or interaction term not in model, use approximate method to estimate confidence interval
+            # Here try to prevent error: if component variable or interaction term not in model, use approximate method to estimate confidence interval
             try:
                 # Check necessary parameters exist in covariance matrix
                 component_in_cov = component_var in model.cov_params().index
@@ -3101,9 +3170,9 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                 # Use 20-30% of conditional effect range as standard error
                 se_base = max(0.1, cond_effect_range * 0.25)
                 
-                # Create different standard errors for each moderator value, edge values slightly larger
+                # Create different standard errors for each moderator value, slightly larger for edge values
                 relative_position = (mod_jn - mod_min) / (mod_max - mod_min)  # Relative position of moderator value (0-1)
-                # Middle values smaller standard error, edge values larger standard error
+                # Smaller standard error for middle values, larger standard error for edge values
                 position_factor = 1 + 0.5 * np.abs(relative_position - 0.5) * 2  # 1.0-1.5 factor
                 
                 se_cond_effects = se_base * position_factor
@@ -3114,7 +3183,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                 p = len(model.params)
                 small_sample_correction = np.sqrt(n / (n - p - 1)) if n > p + 1 else 1.5
                 se_cond_effects = se_cond_effects * small_sample_correction
-                print(f"  ⓘ Applied small sample correction factor {small_sample_correction:.2f} to confidence interval of Johnson-Neyman plot")
+                print(f"  ⓘ Applied small sample correction factor {small_sample_correction:.2f} to Johnson-Neyman plot confidence interval")
             
             t_value = stats.t.ppf(0.975, model.df_resid)
             ci_lower = cond_effects - t_value * se_cond_effects
@@ -3123,16 +3192,16 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
             # Plot Johnson-Neyman
             ax_jn.plot(mod_jn, cond_effects, 'k-', linewidth=2.5)
             
-            # Create significant region mask
+            # Create significant area mask
             significant_mask = (ci_lower > 0) | (ci_upper < 0)
             
             # Plot confidence interval
             try:
-                # Automatically adjust y axis range, avoid extreme values causing graph difficult to interpret
+                # Automatically adjust y axis range to avoid extreme values causing graph difficult to interpret
                 min_y = min(ci_lower.min(), cond_effects.min())
                 max_y = max(ci_upper.max(), cond_effects.max())
                 
-                # Check range reasonable, if too large, adjust appropriately
+                # Check range is reasonable, if too large, adjust appropriately
                 y_range = max_y - min_y
                 mean_effect = np.mean(cond_effects)
                 
@@ -3143,7 +3212,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                     max_y = min(max_y, mean_effect + adjusted_range)
                     print(f"  ⓘ Johnson-Neyman plot y axis range adjusted to more reasonable range")
                 
-                # Ensure zero point in view, important for explanation
+                # Ensure zero point in view, this is important for explanation
                 if min_y > 0:
                     min_y = -0.1 * max_y  # Ensure zero point visible
                 elif max_y < 0:
@@ -3153,9 +3222,9 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                                   color='lightgray', alpha=0.4, 
                                   label='95% CI')
                 
-                # Find significant region (non-zero region)
-                # Find continuous segments of significant region
-                # Significant region: CI lower limit > 0 or upper limit < 0
+                # Find significant area (non-zero area)
+                # Find continuous segments of significant area
+                # Significant area: CI lower limit > 0 or upper limit < 0
                 regions = []
                 if np.any(significant_mask):
                     # Find start and end of continuous segments
@@ -3178,7 +3247,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                                       ci_upper[start:end+1], 
                                       color='#ffcccc', alpha=0.7)  # Use light red
                     
-                    # Zero line or negative line part of significant region marked with deeper red
+                    # Red line or zero line in significant area
                     if np.all(cond_effects[start:end+1] > 0):
                         # Positive effect
                         ax_jn.fill_between(mod_jn[start:end+1], 
@@ -3204,7 +3273,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                 ax_jn.spines['left'].set_linewidth(1.5)
                 ax_jn.spines['bottom'].set_linewidth(1.5)
                 
-                # Find transition points of significant region
+                # Find transition points of significant area
                 sign_regions = []
                 for i in range(len(mod_jn) - 1):
                     if (ci_lower[i] <= 0 and ci_upper[i] >= 0) != (ci_lower[i+1] <= 0 and ci_upper[i+1] >= 0):
@@ -3212,18 +3281,18 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                         transition_x = (mod_jn[i] + mod_jn[i+1]) / 2
                         sign_regions.append(transition_x)
                 
-                # Mark significant region
+                # Mark significant area
                 if sign_regions:
                     for region in sign_regions:
                         ax_jn.axvline(x=region, color='green', linestyle='--', alpha=0.7)
-                        # Find effect size at transition point
+                        # Find effect size at this location
                         idx = np.argmin(np.abs(mod_jn - region))
                         effect_at_transition = cond_effects[idx]
                         
                         # Mark transition point
                         ax_jn.plot(region, effect_at_transition, 'go', ms=6)
                         
-                        # Clearer mark
+                        # More clear marking
                         ax_jn.annotate(f'{moderator_display} = {region:.2f}', 
                                      xy=(region, effect_at_transition),
                                      xytext=(0, -20 if effect_at_transition > 0 else 20), 
@@ -3238,12 +3307,12 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
                 ax_jn.set_ylabel(f"Effect of {component_display}", fontsize=22, fontweight='bold')
                 ax_jn.set_title("Johnson-Neyman Plot: Regions of Significance", fontsize=24, fontweight='bold')
                 
-                # Enhance JN plot appearance - Only special handling for T3Component7, but keep original color scheme
+                # Enhance JN plot effect - Only special processing for T3Component7, but keep original color scheme
                 if 'T3Component7' in component_var:
                     # Enhance line visibility, but keep black
                     ax_jn.lines[0].set_linewidth(3.0)
                     
-                    # Thinner grid lines to help read small effect
+                    # More fine grid lines to help read small effect
                     ax_jn.grid(True, linestyle=':', alpha=0.3)
                     
                     # Add zero point emphasis line
@@ -3267,7 +3336,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
             except Exception as e:
                 print(f"  ⚠️ Error calculating confidence interval: {str(e)}, will not display confidence interval")
         else:
-            gs.update(hspace=0)  # Remove height ratio setting, avoid heights error
+            gs.update(hspace=0)  # Remove height ratio setting to avoid heights error
             # Hide bottom subplot area
             plt.subplots_adjust(bottom=0.2, top=0.9)
     except Exception as e:
@@ -3288,7 +3357,7 @@ def create_conditional_effect_plots(model, data, dependent_var, component_var, m
         print(f"  ❌ Error creating conditional effect plot: {str(e)}")
         plt.close()
         return None
-
+        
 def calculate_conditional_effect_p_value(model, component_var, moderator_var, mod_value, bootstrap_stats=None):
     """
     Calculate the p-value of conditional effect at given moderator value
